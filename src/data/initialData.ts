@@ -8,7 +8,8 @@ export const INITIAL_USERS: User[] = [
     role: 'inventory_manager',
     title: 'Operations lead',
     warehouseId: 'wh-northdock',
-    avatarUrl: '/src/assets/images/stocksense_user_avatar_1790401027960.jpg'
+    avatarUrl: '/src/assets/images/stocksense_user_avatar_1790401027960.jpg',
+    passwordHash: '$2b$10$3.G4ym.Ux/BSiwUY2bLDCehPkBtST/7F0fgj8HW/23AV0k68ju5u6'
   },
   {
     id: 'usr-2',
@@ -17,7 +18,8 @@ export const INITIAL_USERS: User[] = [
     role: 'warehouse_staff',
     title: 'Warehouse Specialist',
     warehouseId: 'wh-northdock',
-    avatarUrl: '/src/assets/images/stocksense_user_avatar_1790401027960.jpg'
+    avatarUrl: '/src/assets/images/stocksense_user_avatar_1790401027960.jpg',
+    passwordHash: '$2b$10$3.G4ym.Ux/BSiwUY2bLDCehPkBtST/7F0fgj8HW/23AV0k68ju5u6'
   }
 ];
 

@@ -23,8 +23,8 @@ export const AuthModal: React.FC = () => {
   const [loginId, setLoginId] = useState('dexter.morgan');
   const [email, setEmail] = useState('');
   const [signupRole, setSignupRole] = useState<UserRole>('inventory_manager');
-  const [password, setPassword] = useState('••••••••••');
-  const [reenterPassword, setReenterPassword] = useState('••••••••••');
+  const [password, setPassword] = useState('Stocksense2026!');
+  const [reenterPassword, setReenterPassword] = useState('Stocksense2026!');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
 
@@ -251,7 +251,8 @@ export const AuthModal: React.FC = () => {
                         type="button"
                         onClick={() => {
                           setLoginId('dexter.morgan@stocksense.io');
-                          login('dexter.morgan@stocksense.io');
+                          setPassword('Stocksense2026!');
+                          login('dexter.morgan@stocksense.io', 'Stocksense2026!');
                         }}
                         className="p-2 rounded-xl border border-stone-200 hover:border-[#1e3a34] bg-stone-50/80 text-left transition-all cursor-pointer"
                       >
@@ -268,7 +269,8 @@ export const AuthModal: React.FC = () => {
                         type="button"
                         onClick={() => {
                           setLoginId('jamie.wu@stocksense.io');
-                          login('jamie.wu@stocksense.io');
+                          setPassword('Stocksense2026!');
+                          login('jamie.wu@stocksense.io', 'Stocksense2026!');
                         }}
                         className="p-2 rounded-xl border border-stone-200 hover:border-[#b45309] bg-stone-50/80 text-left transition-all cursor-pointer"
                       >

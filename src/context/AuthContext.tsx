@@ -1,12 +1,14 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { User, UserRole } from '../types/inventory';
 import { INITIAL_USERS } from '../data/initialData';
+import { api, setAuthToken, getAuthToken } from '../services/apiClient';
 
 interface AuthContextType {
   currentUser: User | null;
   isAuthenticated: boolean;
   isDexterAccount: boolean;
   isAlexAccount: boolean;
+  isLoading: boolean;
   login: (emailOrLoginId: string, password?: string) => Promise<boolean>;
   signup: (name: string, email: string, role: UserRole, warehouseId: string) => Promise<boolean>;
   logout: () => void;
@@ -39,6 +41,8 @@ export const checkIsDexterAccount = (user: User | null): boolean => {
 export const checkIsAlexAccount = checkIsDexterAccount;
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+
   const [users, setUsers] = useState<User[]>(() => {
     const saved = localStorage.getItem(USERS_STORAGE_KEY);
     if (saved) {
@@ -54,61 +58,107 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return INITIAL_USERS;
   });
 
+  // Always boot into /login when there is no valid session or token
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem(AUTH_STORAGE_KEY);
-    if (saved) {
+    const token = getAuthToken();
+    const savedUser = localStorage.getItem(AUTH_STORAGE_KEY);
+    if (token && savedUser) {
       try {
-        const parsed = JSON.parse(saved);
-        if (parsed && parsed.email) {
-          if (parsed.id === 'usr-1' || parsed.email.includes('alex.morgan')) {
-            return {
-              ...parsed,
-              name: 'Dexter Morgan',
-              email: 'dexter.morgan@stocksense.io'
-            };
-          }
-          return parsed;
-        }
-      } catch (e) {
-        console.error('Failed to parse stored auth user', e);
+        return JSON.parse(savedUser);
+      } catch {
+        return null;
       }
     }
-    return INITIAL_USERS[0];
+    return null; // Boot into login by default if no valid token
   });
 
+  const logout = useCallback(() => {
+    setAuthToken(null);
+    localStorage.removeItem(AUTH_STORAGE_KEY);
+    setCurrentUser(null);
+  }, []);
+
+  // Validate session on boot if token exists
   useEffect(() => {
-    if (currentUser) {
-      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(currentUser));
-    } else {
-      localStorage.removeItem(AUTH_STORAGE_KEY);
-    }
-  }, [currentUser]);
+    const verifySession = async () => {
+      const token = getAuthToken();
+      if (!token) {
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const data = await api.get<{ user: User }>('/api/auth/me');
+        if (data && data.user) {
+          setCurrentUser(data.user);
+          localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(data.user));
+        }
+      } catch (err) {
+        console.warn('Session verification failed, logging out:', err);
+        logout();
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    verifySession();
+  }, [logout]);
+
+  // Listen for unauthorized 401 events anywhere in the app
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      logout();
+    };
+    window.addEventListener('stocksense:unauthorized', handleUnauthorized);
+    return () => {
+      window.removeEventListener('stocksense:unauthorized', handleUnauthorized);
+    };
+  }, [logout]);
 
   useEffect(() => {
     localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
   }, [users]);
 
-  const login = async (identifier: string, _password?: string): Promise<boolean> => {
+  const login = async (identifier: string, password?: string): Promise<boolean> => {
     const clean = identifier.trim().toLowerCase();
     if (!clean) return false;
 
-    const user = users.find(u => {
-      const email = u.email.toLowerCase();
-      const name = u.name.toLowerCase();
-      const slug = name.replace(/\s+/g, '.');
-      const emailPrefix = email.split('@')[0];
-      return (
-        email === clean ||
-        name === clean ||
-        slug === clean ||
-        emailPrefix === clean ||
-        (!clean.includes('@') && email === `${clean}@stocksense.io`)
-      );
-    });
+    try {
+      const response = await api.post<{ token: string; user: User }>('/api/auth/login', {
+        emailOrLoginId: clean,
+        password: password || 'Stocksense2026!'
+      });
 
-    if (user) {
-      setCurrentUser(user);
-      return true;
+      if (response && response.token && response.user) {
+        setAuthToken(response.token);
+        setCurrentUser(response.user);
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(response.user));
+        return true;
+      }
+    } catch (err) {
+      console.warn('Backend login attempt failed, trying fallback local accounts:', err);
+      // Fallback for offline demo simulation
+      const user = users.find(u => {
+        const email = u.email.toLowerCase();
+        const name = u.name.toLowerCase();
+        const slug = name.replace(/\s+/g, '.');
+        const emailPrefix = email.split('@')[0];
+        return (
+          email === clean ||
+          name === clean ||
+          slug === clean ||
+          emailPrefix === clean ||
+          (!clean.includes('@') && email === `${clean}@stocksense.io`)
+        );
+      });
+
+      if (user) {
+        // If server was unreachable, generate a fallback local token
+        setAuthToken('demo-session-token-' + Date.now());
+        setCurrentUser(user);
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
+        return true;
+      }
     }
 
     return false;
@@ -123,37 +173,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const cleanEmail = email.trim().toLowerCase();
     const cleanName = name.trim();
 
-    const existing = users.find(u => u.email.toLowerCase() === cleanEmail);
-    if (existing) {
-      const updatedUser: User = {
-        ...existing,
-        name: cleanName || existing.name,
+    try {
+      const response = await api.post<{ token: string; user: User }>('/api/auth/register', {
+        name: cleanName,
+        email: cleanEmail,
+        role,
+        warehouseId: warehouseId || 'wh-northdock'
+      });
+
+      if (response && response.token && response.user) {
+        setAuthToken(response.token);
+        setCurrentUser(response.user);
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(response.user));
+        setUsers(prev => {
+          const exists = prev.some(u => u.id === response.user.id);
+          return exists ? prev : [...prev, response.user];
+        });
+        return true;
+      }
+    } catch (err) {
+      console.warn('Backend register failed, trying fallback local registration:', err);
+      const newUser: User = {
+        id: `usr-${Date.now()}`,
+        name: cleanName,
+        email: cleanEmail,
         role,
         title: role === 'inventory_manager' ? 'Inventory Manager' : 'Warehouse Staff',
-        warehouseId: warehouseId || existing.warehouseId || 'wh-northdock'
+        warehouseId: warehouseId || 'wh-northdock',
+        avatarUrl: '/src/assets/images/stocksense_user_avatar_1790401027960.jpg'
       };
-      setUsers(prev => prev.map(u => (u.id === existing.id ? updatedUser : u)));
-      setCurrentUser(updatedUser);
+
+      setAuthToken('demo-session-token-' + Date.now());
+      setUsers(prev => [...prev, newUser]);
+      setCurrentUser(newUser);
+      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(newUser));
       return true;
     }
 
-    const newUser: User = {
-      id: `usr-${Date.now()}`,
-      name: cleanName,
-      email: cleanEmail,
-      role,
-      title: role === 'inventory_manager' ? 'Inventory Manager' : 'Warehouse Staff',
-      warehouseId: warehouseId || 'wh-northdock',
-      avatarUrl: '/src/assets/images/stocksense_user_avatar_1790401027960.jpg'
-    };
-
-    setUsers(prev => [...prev, newUser]);
-    setCurrentUser(newUser);
-    return true;
-  };
-
-  const logout = () => {
-    setCurrentUser(null);
+    return false;
   };
 
   const switchRole = (newRole: UserRole) => {
@@ -170,12 +227,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
     setCurrentUser(updated);
     setUsers(prev => prev.map(u => (u.id === updated.id ? updated : u)));
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(updated));
   };
 
-  const switchUser = (userId: string) => {
+  const switchUser = async (userId: string) => {
     const target = users.find(u => u.id === userId);
     if (target) {
-      setCurrentUser(target);
+      await login(target.email);
     }
   };
 
@@ -198,8 +256,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         users.find(u => u.name.toLowerCase().replace(/\s+/g, '.') === clean) ||
         users[0];
       if (user) {
-        setCurrentUser(user);
-        return true;
+        return login(user.email);
       }
     }
     return false;
@@ -212,6 +269,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAuthenticated: !!currentUser,
         isDexterAccount: checkIsDexterAccount(currentUser),
         isAlexAccount: checkIsDexterAccount(currentUser),
+        isLoading,
         login,
         signup,
         logout,

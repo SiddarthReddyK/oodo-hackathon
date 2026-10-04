@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
+import { Sun, Moon, ChevronDown } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useInventory } from '../../context/InventoryContext';
+import { useTheme } from '../../context/ThemeContext';
 
 export type NavTab =
   | 'dashboard'
@@ -25,6 +27,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const { currentUser } = useAuth();
   const { warehouses, filter, setFilter } = useInventory();
+  const { isDark, toggleTheme } = useTheme();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navItems: { id: NavTab; label: string }[] = [
@@ -38,22 +41,24 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'settings', label: 'Settings' }
   ];
 
+  const currentWarehouse = warehouses.find(w => w.id === filter.warehouseId) || warehouses[0];
+
   return (
-    <header className="bg-[#1e3a34] text-white px-3 sm:px-5 lg:px-6 py-0 flex items-center justify-between border-b border-[#284942] sticky top-0 z-40 h-[64px] shadow-xs">
+    <header className="bg-[#152e28] dark:bg-[#11241f] text-white px-4 sm:px-6 lg:px-8 py-0 flex items-center justify-between border-b border-[#1f3e37] sticky top-0 z-40 h-[60px] shadow-xs">
       {/* Brand logo & Nav Links */}
-      <div className="flex items-center gap-3 xl:gap-6 min-w-0">
+      <div className="flex items-center gap-4 xl:gap-8 min-w-0">
         <button
           onClick={() => setActiveTab('dashboard')}
-          className="flex items-center gap-2 cursor-pointer text-left focus:outline-none shrink-0"
+          className="flex items-center gap-2.5 cursor-pointer text-left focus:outline-none shrink-0"
         >
-          {/* Logo icon matching Figma */}
-          <div className="w-8 h-8 rounded-lg bg-white/10 border border-white/20 flex items-center justify-center text-white shrink-0">
+          {/* Cube logo icon matching reference UI */}
+          <div className="w-7 h-7 rounded-lg border border-white/40 flex items-center justify-center text-white shrink-0">
             <svg
               className="w-4 h-4 text-white"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
-              strokeWidth="2.2"
+              strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
             >
@@ -62,28 +67,28 @@ export const Navbar: React.FC<NavbarProps> = ({
               <path d="M12 22V12" />
             </svg>
           </div>
-          <span className="text-base font-bold tracking-tight text-white font-sans hidden sm:inline">
+          <span className="text-[17px] font-bold tracking-tight text-white font-sans hidden sm:inline">
             StockSense
           </span>
         </button>
 
-        {/* Center Tabs Nav - Spacious & uncluttered */}
-        <nav className="hidden lg:flex items-center gap-0.5 xl:gap-1.5 h-[64px] min-w-0">
+        {/* Center Tabs Nav */}
+        <nav className="hidden lg:flex items-center gap-1 xl:gap-2 h-[60px] min-w-0">
           {navItems.map(item => {
             const isActive = activeTab === item.id;
             return (
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
-                className={`relative px-2 xl:px-3 py-2 text-xs font-medium transition-colors cursor-pointer h-full flex items-center shrink-0 ${
+                className={`relative px-2.5 xl:px-3 py-2 text-[13px] font-medium transition-colors cursor-pointer h-full flex items-center shrink-0 ${
                   isActive
                     ? 'text-white font-bold'
-                    : 'text-emerald-100/80 hover:text-white hover:bg-white/5'
+                    : 'text-stone-300/80 hover:text-white'
                 }`}
               >
                 <span>{item.label}</span>
                 {isActive && (
-                  <span className="absolute bottom-0 left-1.5 right-1.5 h-[3px] bg-white rounded-t-sm" />
+                  <span className="absolute bottom-0 left-2 right-2 h-[3px] bg-white rounded-t-sm" />
                 )}
               </button>
             );
@@ -91,37 +96,50 @@ export const Navbar: React.FC<NavbarProps> = ({
         </nav>
       </div>
 
-      {/* Right User & Warehouse Area - Shrink-0 with generous margin */}
-      <div className="flex items-center gap-2 sm:gap-3 shrink-0 ml-2">
-        {/* Warehouse Selector */}
-        <select
-          value={filter.warehouseId}
-          onChange={(e) => setFilter(prev => ({ ...prev, warehouseId: e.target.value }))}
-          aria-label="Select warehouse"
-          className="bg-white/10 hover:bg-white/15 text-white text-xs font-semibold rounded-lg px-2.5 py-1.5 border border-white/20 focus:outline-none cursor-pointer hidden md:block max-w-[140px] xl:max-w-[190px] truncate shrink-0"
+      {/* Right Controls: Theme Toggle, Warehouse Pill, User Profile */}
+      <div className="flex items-center gap-3 shrink-0 ml-2">
+        {/* Subtle Theme Toggle */}
+        <button
+          onClick={toggleTheme}
+          title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+          aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+          className="p-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-stone-200 border border-white/10 transition-colors cursor-pointer focus:outline-none flex items-center justify-center shrink-0"
         >
-          {warehouses.map(wh => (
-            <option key={wh.id} value={wh.id} className="bg-[#1e3a34] text-white">
-              {wh.name}
-            </option>
-          ))}
-        </select>
+          {isDark ? <Sun className="w-3.5 h-3.5 text-emerald-300" /> : <Moon className="w-3.5 h-3.5 text-emerald-100" />}
+        </button>
 
-        {/* User Pill Button */}
+        {/* Warehouse Selector Pill matching UI */}
+        <div className="relative hidden md:block">
+          <select
+            value={filter.warehouseId}
+            onChange={(e) => setFilter(prev => ({ ...prev, warehouseId: e.target.value }))}
+            aria-label="Select warehouse"
+            className="appearance-none bg-[#1e3c35] hover:bg-[#23453d] text-white text-[12px] font-medium rounded-xl pl-3.5 pr-8 py-1.5 border border-white/15 focus:outline-none cursor-pointer max-w-[190px] truncate"
+          >
+            {warehouses.map(wh => (
+              <option key={wh.id} value={wh.id} className="bg-[#152e28] text-white">
+                {wh.name}
+              </option>
+            ))}
+          </select>
+          <ChevronDown className="w-3.5 h-3.5 text-white/70 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+        </div>
+
+        {/* User Profile Pill matching UI */}
         <button
           onClick={onOpenProfile}
-          className="flex items-center gap-2 p-1 rounded-xl hover:bg-white/10 transition-colors cursor-pointer text-right focus:outline-none shrink-0"
+          className="flex items-center gap-2.5 p-1 rounded-xl hover:bg-white/5 transition-colors cursor-pointer text-right focus:outline-none shrink-0"
         >
           <div className="hidden sm:block text-right">
-            <div className="text-xs font-semibold text-white tracking-tight leading-tight">
+            <div className="text-[13px] font-bold text-white tracking-tight leading-tight">
               {currentUser?.name || 'Dexter Morgan'}
             </div>
-            <div className="text-[10px] text-emerald-200/80 leading-tight">
+            <div className="text-[11px] text-[#9fb3ab] leading-tight mt-0.5">
               {currentUser?.role === 'inventory_manager' ? 'Inventory Manager' : 'Warehouse Staff'}
             </div>
           </div>
-          {/* Avatar circle matching DM initials */}
-          <div className="w-8 h-8 rounded-full bg-[#dcece7] text-[#1e3a34] font-bold text-xs flex items-center justify-center border border-white/30 shadow-xs shrink-0">
+          {/* Avatar circle: white background with dark green initials */}
+          <div className="w-8 h-8 rounded-full bg-white text-[#152e28] font-bold text-xs flex items-center justify-center shadow-xs shrink-0">
             {currentUser?.name
               ? currentUser.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
               : 'DM'}
@@ -142,7 +160,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       {/* Mobile navigation drop */}
       {mobileMenuOpen && (
-        <div className="absolute top-[64px] left-0 right-0 bg-[#1e3a34] border-b border-[#284942] p-4 flex flex-col gap-1 lg:hidden z-50 shadow-xl">
+        <div className="absolute top-[60px] left-0 right-0 bg-[#152e28] border-b border-[#1f3e37] p-4 flex flex-col gap-1 lg:hidden z-50 shadow-xl">
           {navItems.map(item => (
             <button
               key={item.id}
@@ -151,7 +169,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                 setMobileMenuOpen(false);
               }}
               className={`p-2.5 rounded-lg text-left text-xs font-medium ${
-                activeTab === item.id ? 'bg-white/20 text-white font-bold' : 'text-emerald-100'
+                activeTab === item.id
+                  ? 'bg-white/20 text-white font-bold'
+                  : 'text-stone-300'
               }`}
             >
               {item.label}
