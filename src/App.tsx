@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { AuthProvider, useAuth } from './context/AuthContext';
-import { InventoryProvider, useInventory } from './context/InventoryContext';
+import { AuthProvider } from './context/AuthContext';
+import { InventoryProvider } from './context/InventoryContext';
+import { ThemeProvider } from './context/ThemeContext';
+import { AuthGuard } from './components/auth/AuthGuard';
 import { Navbar, NavTab } from './components/layout/Navbar';
 import { DashboardView } from './components/dashboard/DashboardView';
 import { ProductsView } from './components/products/ProductsView';
@@ -21,11 +23,9 @@ import { TransferModal } from './components/operations/TransferModal';
 import { AdjustmentModal } from './components/operations/AdjustmentModal';
 import { ProductFormModal } from './components/products/ProductFormModal';
 import { ProfileModal } from './components/profile/ProfileModal';
-import { AuthModal } from './components/auth/AuthModal';
 import { Operation, Product } from './types/inventory';
 
 function MainApp() {
-  const { isAuthenticated } = useAuth();
   const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
 
   // Modal triggers
@@ -48,11 +48,6 @@ function MainApp() {
   const [transferInitialSourceWhId, setTransferInitialSourceWhId] = useState<string | undefined>(undefined);
   const [transferInitialSourceLocId, setTransferInitialSourceLocId] = useState<string | undefined>(undefined);
   const [adjustmentProductId, setAdjustmentProductId] = useState<string | undefined>(undefined);
-
-  // If not authenticated, show the authentication & onboarding view
-  if (!isAuthenticated) {
-    return <AuthModal />;
-  }
 
   const handleInitiateReorder = (productId: string) => {
     setReorderProductId(productId);
@@ -88,8 +83,8 @@ function MainApp() {
   };
 
   return (
-    <div className="min-h-screen w-screen bg-[#f4f1ea] text-[#1c2a27] font-sans flex flex-col selection:bg-[#1e3a34] selection:text-white">
-      {/* 1. Top Navbar matching Figma screenshot 4 & 5 */}
+    <div className="min-h-screen w-screen bg-[#f4efe6] dark:bg-[#0f1815] text-[#132622] dark:text-[#f8fafc] font-sans flex flex-col selection:bg-[#152e28] selection:text-white">
+      {/* 1. Top Navbar with Theme Toggle */}
       <Navbar
         activeTab={activeTab}
         setActiveTab={(tab) => {
@@ -202,23 +197,14 @@ function MainApp() {
         </div>
       </main>
 
-      {/* Global Modals */}
+      {/* 3. Global Action & Form Modals */}
       <QuickActionModal
         isOpen={isQuickActionOpen}
         onClose={() => setIsQuickActionOpen(false)}
-        onOpenReceipt={() => {
-          setReorderProductId(undefined);
-          setIsReceiptModalOpen(true);
-        }}
+        onOpenReceipt={() => setIsReceiptModalOpen(true)}
         onOpenDelivery={() => setIsDeliveryModalOpen(true)}
-        onOpenTransfer={() => {
-          setTransferInitialProduct(null);
-          setIsTransferModalOpen(true);
-        }}
-        onOpenAdjustment={() => {
-          setAdjustmentProductId(undefined);
-          setIsAdjustmentModalOpen(true);
-        }}
+        onOpenTransfer={() => setIsTransferModalOpen(true)}
+        onOpenAdjustment={() => setIsAdjustmentModalOpen(true)}
         onOpenNewProduct={() => setIsNewProductModalOpen(true)}
       />
 
@@ -273,10 +259,14 @@ function MainApp() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <InventoryProvider>
-        <MainApp />
-      </InventoryProvider>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <InventoryProvider>
+          <AuthGuard>
+            <MainApp />
+          </AuthGuard>
+        </InventoryProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

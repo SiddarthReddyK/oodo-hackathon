@@ -17,13 +17,14 @@ import {
   INITIAL_CATEGORIES
 } from '../data/initialData';
 import { useAuth } from './AuthContext';
+import { api } from '../services/apiClient';
 
-// Modular Services (Split cleanly across the 4 roles)
+// Modular Services
 import {
   computeDashboardKPIs,
   computeLowStockAlerts,
   filterOperationsList
-} from '../services/dashboardService'; // Member 1
+} from '../services/dashboardService';
 import {
   generateProductSku,
   createProductRecord,
@@ -32,17 +33,17 @@ import {
   resolveLocationLabel,
   resolveWarehouseLabel,
   exportProductsToCsv
-} from '../services/productService'; // Member 2
+} from '../services/productService';
 import {
   buildNewOperation,
   processInboundReceipt,
   processOutboundDelivery
-} from '../services/operationsService'; // Member 3
+} from '../services/operationsService';
 import {
   processInternalTransfer,
   executePhysicalStockAdjustment,
   exportStockLedgerToCsv
-} from '../services/stockService'; // Member 4
+} from '../services/stockService';
 
 interface InventoryContextType {
   products: Product[];
@@ -53,7 +54,7 @@ interface InventoryContextType {
   filter: DashboardFilter;
   setFilter: React.Dispatch<React.SetStateAction<DashboardFilter>>;
   resetFilter: () => void;
-  // Product actions (Member 2)
+  // Product actions
   addProduct: (
     productData: Omit<Product, 'id' | 'totalStock' | 'updatedAt'>,
     initialQuantity?: number,
@@ -63,14 +64,14 @@ interface InventoryContextType {
   updateProduct: (id: string, updates: Partial<Product>) => void;
   deleteProduct: (id: string) => void;
   generateSku: (name: string, category: string) => string;
-  // Operation actions (Member 3)
+  // Operation actions
   createOperation: (
     operationData: Omit<Operation, 'id' | 'code' | 'status' | 'createdBy' | 'creatorName'>
   ) => Operation;
   updateOperationStatus: (id: string, newStatus: OperationStatus) => void;
   validateOperation: (id: string) => { success: boolean; error?: string };
   cancelOperation: (id: string) => void;
-  // Adjustment specific (Member 4)
+  // Adjustment specific
   performStockAdjustment: (
     productId: string,
     warehouseId: string,
@@ -78,11 +79,11 @@ interface InventoryContextType {
     countedQty: number,
     reason: string
   ) => void;
-  // Warehouse & Category actions (Member 2)
+  // Warehouse & Category actions
   addWarehouse: (warehouse: Omit<Warehouse, 'id'>) => void;
   updateWarehouse: (id: string, updates: Partial<Warehouse>) => void;
   addCategory: (category: Omit<ProductCategory, 'id'>) => void;
-  // Computed metrics (Member 1)
+  // Computed metrics
   kpis: {
     totalStockCount: number;
     totalStockValuation: number;
@@ -109,7 +110,7 @@ const WAREHOUSES_KEY = 'stocksense_warehouses_v1';
 const CATEGORIES_KEY = 'stocksense_categories_v1';
 
 export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { currentUser } = useAuth();
+  const { currentUser, isAuthenticated } = useAuth();
 
   const [products, setProducts] = useState<Product[]>(() => {
     const saved = localStorage.getItem(PRODUCTS_KEY);
@@ -127,14 +128,6 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       try {
         const parsed: Operation[] = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          const hasInternal = parsed.some(o => o.type === 'internal');
-          const hasAdjustment = parsed.some(o => o.type === 'adjustment');
-          if (!hasInternal || !hasAdjustment) {
-            const missing = INITIAL_OPERATIONS.filter(
-              init => !parsed.some(p => p.id === init.id)
-            );
-            return [...parsed, ...missing];
-          }
           return parsed;
         }
       } catch (e) {
@@ -162,6 +155,46 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     searchQuery: ''
   });
 
+  // Sync with backend API when authenticated
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    let isMounted = true;
+    const fetchBackendData = async () => {
+      try {
+        const [prodRes, opsRes, ledgRes, whRes] = await Promise.allSettled([
+          api.get<Product[]>('/api/products'),
+          api.get<Operation[]>('/api/operations'),
+          api.get<StockLedgerEntry[]>('/api/stock/ledger'),
+          api.get<Warehouse[]>('/api/products/meta/warehouses')
+        ]);
+
+        if (!isMounted) return;
+
+        if (prodRes.status === 'fulfilled' && Array.isArray(prodRes.value) && prodRes.value.length > 0) {
+          setProducts(prodRes.value);
+        }
+        if (opsRes.status === 'fulfilled' && Array.isArray(opsRes.value) && opsRes.value.length > 0) {
+          setOperations(opsRes.value);
+        }
+        if (ledgRes.status === 'fulfilled' && Array.isArray(ledgRes.value) && ledgRes.value.length > 0) {
+          setLedger(ledgRes.value);
+        }
+        if (whRes.status === 'fulfilled' && Array.isArray(whRes.value) && whRes.value.length > 0) {
+          setWarehouses(whRes.value);
+        }
+      } catch (err) {
+        console.warn('Backend sync error (running in local mode):', err);
+      }
+    };
+
+    fetchBackendData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isAuthenticated]);
+
   // Sync state to local storage
   useEffect(() => {
     localStorage.setItem(PRODUCTS_KEY, JSON.stringify(products));
@@ -183,7 +216,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     localStorage.setItem(CATEGORIES_KEY, JSON.stringify(categories));
   }, [categories]);
 
-  // Member 1: Filter Reset
+  // Filter Reset
   const resetFilter = () => {
     setFilter({
       documentType: 'all',
@@ -194,7 +227,6 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     });
   };
 
-  // Member 2: Product & Warehouse Delegations
   const generateSku = (name: string, category: string): string => {
     return generateProductSku(name, category);
   };
@@ -225,15 +257,30 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     if (ledgerEntry) {
       setLedger(prev => [ledgerEntry, ...prev]);
     }
+
+    // Async sync with backend
+    api.post('/api/products', {
+      productData,
+      initialQuantity,
+      initialWarehouseId,
+      initialLocationId
+    }).catch(err => console.warn('Could not sync new product to backend:', err));
+
     return product;
   };
 
   const updateProduct = (id: string, updates: Partial<Product>) => {
     setProducts(prev => applyProductUpdate(prev, id, updates));
+    api.put(`/api/products/${id}`, updates).catch(err =>
+      console.warn('Could not sync product update to backend:', err)
+    );
   };
 
   const deleteProduct = (id: string) => {
     setProducts(prev => removeProductRecord(prev, id));
+    api.delete(`/api/products/${id}`).catch(err =>
+      console.warn('Could not sync product deletion to backend:', err)
+    );
   };
 
   const addWarehouse = (whData: Omit<Warehouse, 'id'>) => {
@@ -242,6 +289,9 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       id: `wh-${Date.now()}`
     };
     setWarehouses(prev => [...prev, newWh]);
+    api.post('/api/products/meta/warehouses', whData).catch(err =>
+      console.warn('Could not sync warehouse to backend:', err)
+    );
   };
 
   const updateWarehouse = (id: string, updates: Partial<Warehouse>) => {
@@ -260,12 +310,28 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     exportProductsToCsv(products);
   };
 
-  // Member 3: Operations Delegations
   const createOperation = (
     opData: Omit<Operation, 'id' | 'code' | 'status' | 'createdBy' | 'creatorName'>
   ): Operation => {
     const newOp = buildNewOperation(opData, operations.length, currentUser);
     setOperations(prev => [newOp, ...prev]);
+
+    // Asynchronously sync with backend endpoint based on operation type
+    const endpoint =
+      opData.type === 'receipt'
+        ? '/api/operations/receipts'
+        : opData.type === 'delivery'
+        ? '/api/operations/deliveries'
+        : opData.type === 'internal'
+        ? '/api/stock/transfers'
+        : null;
+
+    if (endpoint) {
+      api.post(endpoint, opData).catch(err =>
+        console.warn(`Could not sync ${opData.type} operation to backend:`, err)
+      );
+    }
+
     return newOp;
   };
 
@@ -275,9 +341,11 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const cancelOperation = (id: string) => {
     updateOperationStatus(id, 'canceled');
+    api.put(`/api/operations/${id}/cancel`).catch(err =>
+      console.warn('Could not sync operation cancellation to backend:', err)
+    );
   };
 
-  // Dispatcher & Validation Engine (Delegates to Member 3 for Receipts/Deliveries & Member 4 for Transfers)
   const validateOperation = (id: string): { success: boolean; error?: string } => {
     const op = operations.find(o => o.id === id);
     if (!op) return { success: false, error: 'Operation not found' };
@@ -289,7 +357,6 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const nowIso = new Date().toISOString();
 
     if (op.type === 'receipt') {
-      // Member 3: Inbound Receipt Processing
       const res = processInboundReceipt(op, products, warehouses, operatorName, operatorId, nowIso);
       if (!res.success) return { success: false, error: res.error };
 
@@ -298,11 +365,15 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       setOperations(prev =>
         prev.map(o => (o.id === id ? { ...o, status: 'done', completedAt: nowIso } : o))
       );
+
+      api.put(`/api/operations/receipts/${id}/receive`, { operatorId, operatorName }).catch(err =>
+        console.warn('Could not sync receipt execution to backend:', err)
+      );
+
       return { success: true };
     }
 
     if (op.type === 'delivery') {
-      // Member 3: Outbound Delivery Processing
       const res = processOutboundDelivery(op, products, warehouses, operatorName, operatorId, nowIso);
       if (!res.success) return { success: false, error: res.error };
 
@@ -311,11 +382,15 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       setOperations(prev =>
         prev.map(o => (o.id === id ? { ...o, status: 'done', completedAt: nowIso } : o))
       );
+
+      api.put(`/api/operations/deliveries/${id}/dispatch`, { operatorId, operatorName }).catch(err =>
+        console.warn('Could not sync delivery dispatch to backend:', err)
+      );
+
       return { success: true };
     }
 
     if (op.type === 'internal') {
-      // Member 4: Internal Transfer Processing
       const res = processInternalTransfer(op, products, warehouses, operatorName, operatorId, nowIso);
       if (!res.success) return { success: false, error: res.error };
 
@@ -324,13 +399,17 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       setOperations(prev =>
         prev.map(o => (o.id === id ? { ...o, status: 'done', completedAt: nowIso } : o))
       );
+
+      api.put(`/api/stock/transfers/${id}/complete`, { operatorId, operatorName }).catch(err =>
+        console.warn('Could not sync internal transfer to backend:', err)
+      );
+
       return { success: true };
     }
 
-    return { success: true };
+    return { success: false, error: 'Unknown operation type' };
   };
 
-  // Member 4: Adjustments & Ledger Delegations
   const performStockAdjustment = (
     productId: string,
     warehouseId: string,
@@ -338,6 +417,10 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     countedQty: number,
     reason: string
   ) => {
+    const operatorName = currentUser?.name || 'Inventory Auditor';
+    const operatorId = currentUser?.id || 'usr-auditor';
+    const nowIso = new Date().toISOString();
+
     const res = executePhysicalStockAdjustment(
       products,
       warehouses,
@@ -350,20 +433,31 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       currentUser
     );
 
-    if (!res) return;
+    if (res) {
+      setProducts(res.updatedProducts);
+      setOperations(prev => [res.newOperation, ...prev]);
+      setLedger(prev => [res.ledgerEntry, ...prev]);
 
-    setProducts(res.updatedProducts);
-    setOperations(prev => [res.newOperation, ...prev]);
-    setLedger(prev => [res.ledgerEntry, ...prev]);
+      api.post('/api/stock/adjustments', {
+        productId,
+        warehouseId,
+        locationId,
+        countedQty,
+        reason,
+        operatorId,
+        operatorName
+      }).catch(err => console.warn('Could not sync stock adjustment to backend:', err));
+    }
   };
 
   const exportLedgerCsv = () => {
     exportStockLedgerToCsv(ledger);
   };
 
-  // Member 1: Computed KPIs & Dynamic Filter Delegation
+  // Computed metrics
   const kpis = computeDashboardKPIs(products, operations);
   const lowStockAlerts = computeLowStockAlerts(products);
+
   const getFilteredOperations = (): Operation[] => {
     return filterOperationsList(operations, products, filter);
   };

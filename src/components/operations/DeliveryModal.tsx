@@ -15,8 +15,12 @@ export const DeliveryModal: React.FC<DeliveryModalProps> = ({
     const { products, warehouses, createOperation, validateOperation } = useInventory();
 
     const [partnerName, setPartnerName] = useState('');
-    const [sourceWarehouseId, setSourceWarehouseId] = useState('wh-main');
-    const [sourceLocationId, setSourceLocationId] = useState('loc-rack-01');
+    const [sourceWarehouseId, setSourceWarehouseId] = useState(
+        () => warehouses[0]?.id || 'wh-northdock'
+    );
+    const [sourceLocationId, setSourceLocationId] = useState(
+        () => warehouses[0]?.locations[0]?.id || 'loc-dock-01'
+    );
     const [notes, setNotes] = useState('');
     const [items, setItems] = useState<OperationItem[]>([]);
     const [autoValidate, setAutoValidate] = useState(false);

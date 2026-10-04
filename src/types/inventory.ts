@@ -8,6 +8,7 @@ export interface User {
   avatarUrl?: string;
   warehouseId: string;
   title: string;
+  passwordHash?: string;
 }
 
 export type UnitOfMeasure = 'Units' | 'kg' | 'Meters' | 'Boxes' | 'Liters' | 'Pallets';

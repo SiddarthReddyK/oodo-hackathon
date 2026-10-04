@@ -21,10 +21,10 @@ export const TransferModal: React.FC<TransferModalProps> = ({
   const { products, warehouses, createOperation, validateOperation } = useInventory();
 
   const [productId, setProductId] = useState('');
-  const [sourceWhId, setSourceWhId] = useState('wh-main');
-  const [sourceLocId, setSourceLocId] = useState('loc-bulk-bay');
-  const [destWhId, setDestWhId] = useState('wh-prod');
-  const [destLocId, setDestLocId] = useState('loc-prod-rack');
+  const [sourceWhId, setSourceWhId] = useState(() => warehouses[0]?.id || 'wh-northdock');
+  const [sourceLocId, setSourceLocId] = useState(() => warehouses[0]?.locations[0]?.id || 'loc-dock-01');
+  const [destWhId, setDestWhId] = useState(() => warehouses[1]?.id || warehouses[0]?.id || 'wh-southbay');
+  const [destLocId, setDestLocId] = useState(() => warehouses[1]?.locations[0]?.id || warehouses[0]?.locations[0]?.id || 'loc-sb-rack-01');
   const [transferQty, setTransferQty] = useState('10');
   const [notes, setNotes] = useState('');
   const [autoValidate, setAutoValidate] = useState(true);

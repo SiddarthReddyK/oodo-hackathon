@@ -17,8 +17,12 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
     const { products, warehouses, createOperation, validateOperation } = useInventory();
 
     const [partnerName, setPartnerName] = useState('');
-    const [destinationWarehouseId, setDestinationWarehouseId] = useState('wh-main');
-    const [destinationLocationId, setDestinationLocationId] = useState('loc-rec-dock');
+    const [destinationWarehouseId, setDestinationWarehouseId] = useState(
+        () => warehouses[0]?.id || 'wh-northdock'
+    );
+    const [destinationLocationId, setDestinationLocationId] = useState(
+        () => warehouses[0]?.locations[0]?.id || 'loc-dock-01'
+    );
     const [notes, setNotes] = useState('');
     const [items, setItems] = useState<OperationItem[]>([]);
     const [autoValidate, setAutoValidate] = useState(false);
