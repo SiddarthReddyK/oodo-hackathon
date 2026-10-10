@@ -173,7 +173,3 @@ The SQLite database persists in a named volume (`stocksense-data`) mounted to `/
 ```
 
 ---
-
-## License
-
-MIT — see [LICENSE](./LICENSE).
